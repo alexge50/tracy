@@ -242,8 +242,11 @@ int main(int argc, char** argv)
     }
 
     auto& slz = worker.GetSourceLocationZones();
+    auto& slz_gpu = worker.GetGpuSourceLocationZones();
     tracy::Vector<decltype(slz.begin())> slz_selected;
+    tracy::Vector<decltype(slz_gpu.begin())> slz_gpu_selected;
     slz_selected.reserve(slz.size());
+    slz_gpu_selected.reserve(slz_gpu.size());
 
     uint32_t total_cnt = 0;
     for(auto it = slz.begin(); it != slz.end(); ++it)
@@ -261,6 +264,27 @@ int main(int argc, char** argv)
                 if(is_substring(args.filter, name, args.case_sensitive))
                 {
                     slz_selected.push_back_no_space_check(it);
+                }
+            }
+        }
+    }
+
+    uint32_t total_cnt_gpu = 0;
+    for(auto it = slz_gpu.begin(); it != slz_gpu.end(); ++it)
+    {
+        if(it->second.total != 0)
+        {
+            ++total_cnt_gpu;
+            if(args.filter[0] == '\0')
+            {
+                slz_gpu_selected.push_back_no_space_check(it);
+            }
+            else
+            {
+                auto name = get_name(it->first, worker);
+                if(is_substring(args.filter, name, args.case_sensitive))
+                {
+                    slz_gpu_selected.push_back_no_space_check(it);
                 }
             }
         }
@@ -346,6 +370,46 @@ int main(int argc, char** argv)
 
             std::string row = join(values, args.separator);
             printf("%s\n", row.data());
+        }
+    }
+
+    for(auto& it : slz_gpu_selected)
+    {
+        std::vector<std::string> values(columns.size());
+
+        values[0] = get_name(it->first, worker);
+
+        const auto& srcloc = worker.GetSourceLocation(it->first);
+        values[1] = worker.GetString(srcloc.file);
+        values[2] = std::to_string(srcloc.line);
+
+        const auto& zone_data = it->second;
+
+        if (args.unwrap)
+        {
+            int i = 0;
+            for (const auto& zone_thread_data : zone_data.zones) {
+                const auto zone_event = zone_thread_data.Zone();
+                const auto tId = zone_thread_data.Thread();
+                const auto start = zone_event->GpuStart();
+                const auto end = zone_event->GpuEnd();
+
+                values[3] = std::to_string(start);
+
+                auto timespan = end - start;
+                if (args.self_time) {
+                    // unsupported
+                }
+                values[4] = std::to_string(timespan);
+                values[5] = std::to_string(tId);
+
+                std::string row = join(values, args.separator);
+                printf("%s\n", row.data());
+            }
+        }
+        else
+        {
+            // unsupported
         }
     }
 
